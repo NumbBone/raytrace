@@ -2,7 +2,11 @@
 #include "raymath.h"
 #include <math.h>
 
-int map[11][11] = {
+
+#define GRID_COLS 11
+#define GRID_ROWS 11
+
+int map[GRID_ROWS][GRID_COLS] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     {0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
     {0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0},
@@ -23,8 +27,12 @@ Color backround{
     .a = 255,
 };
 
-const int GRID_COLS = sizeof(map[0]) / sizeof(map[0][0]);
-const int GRID_ROWS = sizeof(map) / sizeof(map[0]);
+typedef struct
+{
+    Vector2 posicion;
+    float direction;
+} Player;
+
 
 const float EPSI = 1e-3;
 // UPDATED: Added offset and scale to the conversion logic
@@ -39,6 +47,10 @@ Vector2 screen_to_world(Vector2 screen_pos, Vector2 offset, float scale) {
     float cell_height = ((float)GetScreenHeight() * scale) / GRID_ROWS;
     return { (screen_pos.x - offset.x) / cell_width, (screen_pos.y - offset.y) / cell_height };
 }
+
+Vector2 fromDirection(float angle) {
+    return Vector2Normalize(Vector2{cosf(angle), sinf(angle)});
+};
 
 float snap(float x, float dx) 
 {
@@ -102,12 +114,12 @@ Vector2 Gen_NextPoint(Vector2 p1, Vector2 p2)
         p3 = newPoint;
     }
     
-    DrawCircleV(world_to_screen(p3,Vector2{100,100},0.5),10,PINK);
+    DrawCircleV(world_to_screen(p3,Vector2{0,0},1),10,PINK);
 
     return p3;
 };
 
-void minimap(Vector2 Point, Vector2 Point2,Vector2 offset, float scale)
+void minimap(Player *player,Vector2 offset, float scale)
 {
     int width = GetScreenWidth()*scale;
     int height = GetScreenHeight()*scale;
@@ -137,35 +149,48 @@ void minimap(Vector2 Point, Vector2 Point2,Vector2 offset, float scale)
     }
     
 
-    DrawCircleV(world_to_screen(Point, offset ,scale), 10, RED);
+    DrawCircleV(world_to_screen(player->posicion, offset ,scale), 10, RED);
 
-    DrawLineEx(world_to_screen(Point, offset, scale),world_to_screen(Point2, offset, scale),7, RED);
-    DrawCircleV(world_to_screen(Point2, offset, scale), 10 ,RED);
-    for (;;)
-    {
-        Vector2 c = Cell_snap(Point, Point2);
-        if (map[(int)c.y][(int)c.x] == 1){
-            break;
-        }
-        if (c.x >= GRID_COLS || c.x < 0 || c.y >= GRID_ROWS ||c.y < 0){
-            break;
-        }
-        Vector2 pt = Point2;
-        Point2 = Gen_NextPoint(Point, Point2);
-            Point = pt;
-    };
+    Vector2 lookAt = Vector2Add(player->posicion, fromDirection(player->direction));
+
+    DrawLineEx(
+        world_to_screen(player->posicion, offset, scale),
+        world_to_screen(lookAt, offset, scale), 
+        3, RED
+    );
+
+
+    // for (;;)
+    // {
+    //     Vector2 c = Cell_snap(Point, Point2);
+    //     if (map[(int)c.y][(int)c.x] == 1){
+    //         break;
+    //     }
+    //     if (c.x >= GRID_COLS || c.x < 0 || c.y >= GRID_ROWS ||c.y < 0){
+    //         break;
+    //     }
+    //     Vector2 pt = Point2;
+    //     Point2 = Gen_NextPoint(Point, Point2);
+    //         Point = pt;
+    // };
 };
 
 int main(void) {
+
     InitWindow(900, 900, "raylib [core] example - basic window");
     SetTargetFPS(60);
 
+    Player player = {
+        {5.5, 5.5},
+        -PI/2
+    };
     while (!WindowShouldClose()) {
         BeginDrawing();
             ClearBackground(backround);
-            minimap(Vector2{5.5 , 5.5}, Vector2{ 6 , 6}, Vector2{100 ,100},0.5);
+
+            minimap(&player, Vector2{0,0},1);
             EndDrawing();
-    }
+    };
 
     CloseWindow();
     return 0;
