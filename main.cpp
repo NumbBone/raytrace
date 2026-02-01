@@ -1,10 +1,13 @@
 #include "raylib.h"
 #include "raymath.h"
 #include <math.h>
+#include <tuple>
 
+const int GRID_COLS =11;
+const int GRID_ROWS =11;
 
-#define GRID_COLS 11
-#define GRID_ROWS 11
+const float FOV           =PI / 2;
+const float DIST_FROM_CAM =1;
 
 int map[GRID_ROWS][GRID_COLS] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -27,12 +30,15 @@ Color backround{
     .a = 255,
 };
 
-typedef struct
+class Player
 {
-    Vector2 posicion;
-    float direction;
-} Player;
-
+    public:
+        Vector2 posicion;
+        float direction;
+        std::tuple<Vector2, Vector2> fovRange(){
+            
+        }
+};
 
 const float EPSI = 1e-3;
 // UPDATED: Added offset and scale to the conversion logic
@@ -79,9 +85,6 @@ Vector2 Gen_NextPoint(Vector2 p1, Vector2 p2)
     float dx = p2.x - p1.x;
     float dy = p2.y - p1.y;
 
-    //y = xm + c
-    //x = (y + c)/m 
-    //dy/dx = m
     Vector2 p3 = p2;
 
     if (dx != 0){
@@ -151,14 +154,27 @@ void minimap(Player *player,Vector2 offset, float scale)
 
     DrawCircleV(world_to_screen(player->posicion, offset ,scale), 10, RED);
 
-    Vector2 lookAt = Vector2Add(player->posicion, fromDirection(player->direction));
+    Vector2 dir = fromDirection(player->direction);
+    Vector2 focalPoint = player->posicion + dir * DIST_FROM_CAM;
 
     DrawLineEx(
         world_to_screen(player->posicion, offset, scale),
-        world_to_screen(lookAt, offset, scale), 
+        world_to_screen(focalPoint, offset, scale), 
         3, RED
     );
 
+    //Drawing Cam
+    float halfPlane = tanf(FOV / 2);
+    Vector2 plane = {-dir.y, dir.x};
+
+    Vector2 rplane = focalPoint + plane * halfPlane;
+    Vector2 lplane = focalPoint + plane * -halfPlane;
+
+    DrawLineEx(
+        world_to_screen(lplane, offset, scale),
+        world_to_screen(rplane, offset, scale), 
+        3, BLUE 
+    );
 
     // for (;;)
     // {
@@ -182,7 +198,7 @@ int main(void) {
 
     Player player = {
         {5.5, 5.5},
-        -PI/2
+        -PI/4
     };
     while (!WindowShouldClose()) {
         BeginDrawing();
