@@ -8,6 +8,10 @@ const int GRID_ROWS =11;
 
 const float FOV           =PI / 2;
 const float DIST_FROM_CAM =1;
+const float EPSI = 1e-3;
+
+const int SCREEN_WIDTH = 100;
+const float FAR_PLANE = 10.0;
 
 int map[GRID_ROWS][GRID_COLS] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -30,32 +34,14 @@ Color backround{
     .a = 255,
 };
 
-class Player
-{
-    public:
-        Vector2 posicion;
-        float direction;
-        std::tuple<Vector2, Vector2> fovRange(){
-            
-        }
-};
-
-const float EPSI = 1e-3;
-// UPDATED: Added offset and scale to the conversion logic
-Vector2 world_to_screen(Vector2 world_pos, Vector2 offset, float scale) {
-    float cell_width = ((float)GetScreenWidth() * scale) / GRID_COLS;
-    float cell_height = ((float)GetScreenHeight() * scale) / GRID_ROWS;
-    return { offset.x + world_pos.x * cell_width, offset.y + world_pos.y * cell_height };
-}
-
-Vector2 screen_to_world(Vector2 screen_pos, Vector2 offset, float scale) {
-    float cell_width = ((float)GetScreenWidth() * scale) / GRID_COLS;
-    float cell_height = ((float)GetScreenHeight() * scale) / GRID_ROWS;
-    return { (screen_pos.x - offset.x) / cell_width, (screen_pos.y - offset.y) / cell_height };
-}
 
 Vector2 fromDirection(float angle) {
     return Vector2Normalize(Vector2{cosf(angle), sinf(angle)});
+};
+
+bool inMap(Vector2 c)
+{
+    return (c.x >= GRID_COLS || c.x < 0 || c.y >= GRID_ROWS || c.y < 0);
 };
 
 float snap(float x, float dx) 
@@ -79,6 +65,18 @@ Vector2 Cell_snap(Vector2 p1 , Vector2 p2)
 
     return Cell;
 };
+
+Vector2 world_to_screen(Vector2 world_pos, Vector2 offset, float scale) {
+    float cell_width = ((float)GetScreenWidth() * scale) / GRID_COLS;
+    float cell_height = ((float)GetScreenHeight() * scale) / GRID_ROWS;
+    return { offset.x + world_pos.x * cell_width, offset.y + world_pos.y * cell_height };
+}
+
+Vector2 screen_to_world(Vector2 screen_pos, Vector2 offset, float scale) {
+    float cell_width = ((float)GetScreenWidth() * scale) / GRID_COLS;
+    float cell_height = ((float)GetScreenHeight() * scale) / GRID_ROWS;
+    return { (screen_pos.x - offset.x) / cell_width, (screen_pos.y - offset.y) / cell_height };
+}
 
 Vector2 Gen_NextPoint(Vector2 p1, Vector2 p2) 
 {
@@ -113,13 +111,68 @@ Vector2 Gen_NextPoint(Vector2 p1, Vector2 p2)
 
     } else {
         Vector2 newPoint = {p2.x, snap(p2.y, dy)};
-        DrawCircleV(world_to_screen(newPoint, Vector2{0,0} ,1),10,PINK);
         p3 = newPoint;
     }
-    
-    DrawCircleV(world_to_screen(p3,Vector2{0,0},1),10,PINK);
 
     return p3;
+};
+class Player
+{
+    public:
+        Vector2 posicion;
+        float direction;
+
+        std::tuple<Vector2, Vector2> fovRange(){
+
+            Vector2 dir = fromDirection(this->direction);
+
+            float halfPlane = tanf(FOV / 2);
+            Vector2 plane = {-dir.y, dir.x};
+
+            Vector2 focalPoint = this->posicion + dir * DIST_FROM_CAM;
+
+            Vector2 p2 = focalPoint + plane * halfPlane;
+            Vector2 p1 = focalPoint + plane * -halfPlane;
+
+            return {p1, p2};
+        }
+};
+
+Vector2 castRay(Vector2 p1, Vector2 p2) 
+{
+ for (;;)
+    {
+        Vector2 c = Cell_snap(p1, p2);
+        if (map[(int)c.y][(int)c.x] == 1){
+            return p2;
+        }
+        if (c.x >= GRID_COLS || c.x < 0 || c.y >= GRID_ROWS ||c.y < 0){
+            return p2;
+        }
+        Vector2 pt = p2;
+        p2 = Gen_NextPoint(p1, p2);
+            p1 = pt;
+    };
+};
+
+void render(Player *player) 
+{
+    const int stripWidth = GetScreenWidth() / SCREEN_WIDTH; 
+    auto [lpoint, rpoint] = player->fovRange();
+
+    for (size_t i = 0; i < SCREEN_WIDTH; i++)
+    {
+        Vector2 p1 = Vector2Lerp(lpoint, rpoint, (float)i / (float)SCREEN_WIDTH);
+        Vector2 ray = castRay(player->posicion, p1);
+        Vector2 cell = Cell_snap(player->posicion, ray);
+
+        if (!inMap(cell) && map[(int)cell.y][(int)cell.x] != 0){
+            float stripHeight = (1 / Vector2Distance(player->posicion, ray)) * GetScreenHeight();
+            DrawRectangle(i * stripWidth, (GetScreenHeight() - stripHeight ) * 0.5,stripWidth, stripHeight, GREEN);
+        }
+    }
+    
+
 };
 
 void minimap(Player *player,Vector2 offset, float scale)
@@ -163,12 +216,7 @@ void minimap(Player *player,Vector2 offset, float scale)
         3, RED
     );
 
-    //Drawing Cam
-    float halfPlane = tanf(FOV / 2);
-    Vector2 plane = {-dir.y, dir.x};
-
-    Vector2 rplane = focalPoint + plane * halfPlane;
-    Vector2 lplane = focalPoint + plane * -halfPlane;
+    auto [lplane, rplane] = player->fovRange();
 
     DrawLineEx(
         world_to_screen(lplane, offset, scale),
@@ -176,19 +224,6 @@ void minimap(Player *player,Vector2 offset, float scale)
         3, BLUE 
     );
 
-    // for (;;)
-    // {
-    //     Vector2 c = Cell_snap(Point, Point2);
-    //     if (map[(int)c.y][(int)c.x] == 1){
-    //         break;
-    //     }
-    //     if (c.x >= GRID_COLS || c.x < 0 || c.y >= GRID_ROWS ||c.y < 0){
-    //         break;
-    //     }
-    //     Vector2 pt = Point2;
-    //     Point2 = Gen_NextPoint(Point, Point2);
-    //         Point = pt;
-    // };
 };
 
 int main(void) {
@@ -204,7 +239,8 @@ int main(void) {
         BeginDrawing();
             ClearBackground(backround);
 
-            minimap(&player, Vector2{0,0},1);
+            render(&player); 
+            minimap(&player, Vector2{0,0},0.25);
             EndDrawing();
     };
 
