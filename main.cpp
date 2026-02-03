@@ -7,7 +7,7 @@ const int GRID_COLS =11;
 const int GRID_ROWS =11;
 
 const float FOV           =PI / 2;
-const float DIST_FROM_CAM =1;
+const float DIST_FROM_CAM =1.2;
 const float EPSI = 1e-3;
 
 const int SCREEN_WIDTH = 100;
@@ -15,7 +15,7 @@ const float FAR_PLANE = 10.0;
 
 int map[GRID_ROWS][GRID_COLS] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0},
+    {0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0},
     {0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0},
     {0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0},
     {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0},
@@ -136,6 +136,23 @@ class Player
 
             return {p1, p2};
         }
+        void playerUpdate(){
+            if (IsKeyDown(KEY_A)){
+                this->direction -= PI * 0.025;
+            };
+
+            if (IsKeyDown(KEY_D)){
+                this->direction += PI * 0.025;
+            };
+
+            if (IsKeyDown(KEY_W)){
+                this->posicion = this->posicion + fromDirection(this->direction) * 0.025;
+            };
+    
+            if (IsKeyDown(KEY_S)){
+                this->posicion = this->posicion - fromDirection(this->direction) * 0.025;
+            };
+        }
 };
 
 Vector2 castRay(Vector2 p1, Vector2 p2) 
@@ -162,13 +179,17 @@ void render(Player *player)
 
     for (size_t i = 0; i < SCREEN_WIDTH; i++)
     {
-        Vector2 p1 = Vector2Lerp(lpoint, rpoint, (float)i / (float)SCREEN_WIDTH);
-        Vector2 ray = castRay(player->posicion, p1);
-        Vector2 cell = Cell_snap(player->posicion, ray);
+        const Vector2 p1 = Vector2Lerp(lpoint, rpoint, (float)i / (float)SCREEN_WIDTH);
+        const Vector2 ray = castRay(player->posicion, p1);
+        const Vector2 cell = Cell_snap(player->posicion, ray);
 
         if (!inMap(cell) && map[(int)cell.y][(int)cell.x] != 0){
-            float stripHeight = (1 / Vector2Distance(player->posicion, ray)) * GetScreenHeight();
-            DrawRectangle(i * stripWidth, (GetScreenHeight() - stripHeight ) * 0.5,stripWidth, stripHeight, GREEN);
+            const float t = (1 / Vector2Distance(player->posicion, ray));
+            float stripHeight = t * GetScreenHeight();
+            DrawRectangle(i * stripWidth, (GetScreenHeight() - stripHeight ) * 0.5,stripWidth,
+             stripHeight, 
+             Color{(unsigned char)(255*t),0,0,255}
+            );
         }
     }
     
@@ -177,34 +198,30 @@ void render(Player *player)
 
 void minimap(Player *player,Vector2 offset, float scale)
 {
-    int width = GetScreenWidth()*scale;
-    int height = GetScreenHeight()*scale;
+float cellSize = ((float)GetScreenHeight() * scale) / GRID_ROWS;
 
-    float Cell_width = (float)width / GRID_COLS;
-    float Cell_height = (float)height / GRID_ROWS;
-    for (int x = 0; x < GRID_COLS + 1; ++x)
-    {
-        DrawLine(offset.x + x * Cell_width, offset.y, offset.x + x * Cell_width, offset.y + height, GRAY);
+    float mapDisplayWidth = cellSize * GRID_COLS;
+    float mapDisplayHeight = cellSize * GRID_ROWS;
+
+    for (int x = 0; x <= GRID_COLS; ++x) {
+        DrawLine(offset.x + x * cellSize, offset.y, 
+                 offset.x + x * cellSize, offset.y + mapDisplayHeight, GRAY);
     }
-    for (int y = 0; y < GRID_COLS + 1; ++y)
-    {
-        DrawLine(offset.x, offset.y + y * Cell_height, offset.x + width,  offset.y + y * Cell_height, GRAY);
+    for (int y = 0; y <= GRID_ROWS; ++y) {
+        DrawLine(offset.x, offset.y + y * cellSize, 
+                 offset.x + mapDisplayWidth, offset.y + y * cellSize, GRAY);
     }
 
-
-    for (int y = 0; y <= GRID_COLS; y++)
-    {
-        for (int x = 0; x <= GRID_ROWS; x++)
-        {
-            if(map[y][x] == 1){
-                Vector2 screenPos = world_to_screen({(float)x, (float)y}, offset, scale);
-                DrawRectangle(screenPos.x, screenPos.y, Cell_width, Cell_height, RED);
+    for (int y = 0; y < GRID_ROWS; y++) {
+        for (int x = 0; x < GRID_COLS; x++) {
+            if(map[y][x] == 1) {
+                // Use the same cellSize for both width and height of the rectangle
+                DrawRectangle(offset.x + x * cellSize, offset.y + y * cellSize, 
+                              cellSize, cellSize, RED);
             }
         }
-        
     }
     
-
     DrawCircleV(world_to_screen(player->posicion, offset ,scale), 10, RED);
 
     Vector2 dir = fromDirection(player->direction);
@@ -228,7 +245,7 @@ void minimap(Player *player,Vector2 offset, float scale)
 
 int main(void) {
 
-    InitWindow(900, 900, "raylib [core] example - basic window");
+    InitWindow(1200, 900, "raylib [core] example - basic window");
     SetTargetFPS(60);
 
     Player player = {
@@ -236,12 +253,14 @@ int main(void) {
         -PI/4
     };
     while (!WindowShouldClose()) {
-        BeginDrawing();
-            ClearBackground(backround);
+        player.playerUpdate();
 
-            render(&player); 
-            minimap(&player, Vector2{0,0},0.25);
-            EndDrawing();
+            BeginDrawing();
+        ClearBackground(backround);
+
+        render(&player);
+        minimap(&player, Vector2{0, 0}, 0.35);
+        EndDrawing();
     };
 
     CloseWindow();
