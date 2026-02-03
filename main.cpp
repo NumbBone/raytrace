@@ -7,24 +7,23 @@ const int GRID_COLS =11;
 const int GRID_ROWS =11;
 
 const float FOV           =PI / 2;
-const float DIST_FROM_CAM =1.2;
+const float DIST_FROM_CAM =1;
 const float EPSI = 1e-3;
 
-const int SCREEN_WIDTH = 100;
-const float FAR_PLANE = 10.0;
+const int SCREEN_WIDTH = 200;
 
-int map[GRID_ROWS][GRID_COLS] = {
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+Color map[11][11] = {
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
+    { {0}, RED,    GOLD,   {0}, {0}, {0}, LIME,   {0},    {0},    {0},    {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, VIOLET, SKYBLUE, {0},    {0},    {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    ORANGE,  PINK,   {0},    {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    BLUE,   PURPLE, {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
+    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} }
 };
 
 Color backround{
@@ -160,10 +159,10 @@ Vector2 castRay(Vector2 p1, Vector2 p2)
  for (;;)
     {
         Vector2 c = Cell_snap(p1, p2);
-        if (map[(int)c.y][(int)c.x] == 1){
+        if (map[(int)c.y][(int)c.x].a != 0){
             return p2;
         }
-        if (c.x >= GRID_COLS || c.x < 0 || c.y >= GRID_ROWS ||c.y < 0){
+        if ((c.x >= GRID_COLS || c.x < 0 || c.y >= GRID_ROWS ||c.y < 0)){
             return p2;
         }
         Vector2 pt = p2;
@@ -176,6 +175,7 @@ void render(Player *player)
 {
     const int stripWidth = GetScreenWidth() / SCREEN_WIDTH; 
     auto [lpoint, rpoint] = player->fovRange();
+    Vector2 dir =fromDirection(player->direction);
 
     for (size_t i = 0; i < SCREEN_WIDTH; i++)
     {
@@ -183,12 +183,17 @@ void render(Player *player)
         const Vector2 ray = castRay(player->posicion, p1);
         const Vector2 cell = Cell_snap(player->posicion, ray);
 
-        if (!inMap(cell) && map[(int)cell.y][(int)cell.x] != 0){
-            const float t = (1 / Vector2Distance(player->posicion, ray));
-            float stripHeight = t * GetScreenHeight();
-            DrawRectangle(i * stripWidth, (GetScreenHeight() - stripHeight ) * 0.5,stripWidth,
-             stripHeight, 
-             Color{(unsigned char)(255*t),0,0,255}
+        if (!inMap(cell) && map[(int)cell.y][(int)cell.x].a != 0){
+
+            Vector2 rayVec = Vector2Subtract(ray, player->posicion);
+            float perpDist = Vector2DotProduct(rayVec, dir);
+
+            if (perpDist < 0.1f) perpDist = 0.1f;
+
+            float stripHeight = (GetScreenHeight() / perpDist) * (DIST_FROM_CAM / (2.0f * tanf(FOV*0.5)));
+            DrawRectangle(i * stripWidth, (GetScreenHeight() - stripHeight ) * 0.5,stripWidth + 1,
+             stripHeight,
+             map[(int)cell.y][(int)cell.x]
             );
         }
     }
@@ -196,52 +201,41 @@ void render(Player *player)
 
 };
 
-void minimap(Player *player,Vector2 offset, float scale)
+void minimap(Player *player, Vector2 offset, float scale)
 {
-float cellSize = ((float)GetScreenHeight() * scale) / GRID_ROWS;
-
-    float mapDisplayWidth = cellSize * GRID_COLS;
-    float mapDisplayHeight = cellSize * GRID_ROWS;
-
-    for (int x = 0; x <= GRID_COLS; ++x) {
-        DrawLine(offset.x + x * cellSize, offset.y, 
-                 offset.x + x * cellSize, offset.y + mapDisplayHeight, GRAY);
-    }
-    for (int y = 0; y <= GRID_ROWS; ++y) {
-        DrawLine(offset.x, offset.y + y * cellSize, 
-                 offset.x + mapDisplayWidth, offset.y + y * cellSize, GRAY);
-    }
+    float cellSize = ((float)GetScreenHeight() * scale) / GRID_ROWS;
 
     for (int y = 0; y < GRID_ROWS; y++) {
         for (int x = 0; x < GRID_COLS; x++) {
-            if(map[y][x] == 1) {
-                // Use the same cellSize for both width and height of the rectangle
-                DrawRectangle(offset.x + x * cellSize, offset.y + y * cellSize, 
-                              cellSize, cellSize, RED);
+            Color cellColor = map[y][x];
+            
+            Vector2 drawPos = { offset.x + x * cellSize, offset.y + y * cellSize };
+
+            if (cellColor.a != 0) {
+                DrawRectangleV(drawPos, {cellSize, cellSize}, cellColor);
+            } else {
+                DrawRectangleLines(drawPos.x, drawPos.y, cellSize, cellSize, DARKGRAY);
             }
         }
     }
-    
-    DrawCircleV(world_to_screen(player->posicion, offset ,scale), 10, RED);
+
+    Vector2 playerMinimapPos = {
+        offset.x + player->posicion.x * cellSize,
+        offset.y + player->posicion.y * cellSize
+    };
+    DrawCircleV(playerMinimapPos, 5, WHITE);
 
     Vector2 dir = fromDirection(player->direction);
-    Vector2 focalPoint = player->posicion + dir * DIST_FROM_CAM;
-
-    DrawLineEx(
-        world_to_screen(player->posicion, offset, scale),
-        world_to_screen(focalPoint, offset, scale), 
-        3, RED
-    );
+    Vector2 viewLine = Vector2Add(playerMinimapPos, Vector2Scale(dir, cellSize));
+    DrawLineEx(playerMinimapPos, viewLine, 2, YELLOW);
 
     auto [lplane, rplane] = player->fovRange();
-
-    DrawLineEx(
-        world_to_screen(lplane, offset, scale),
-        world_to_screen(rplane, offset, scale), 
-        3, BLUE 
-    );
-
-};
+    
+    Vector2 lScreen = { offset.x + lplane.x * cellSize, offset.y + lplane.y * cellSize };
+    Vector2 rScreen = { offset.x + rplane.x * cellSize, offset.y + rplane.y * cellSize };
+    
+    DrawLineEx(lScreen, rScreen, 2, BLUE);
+}
 
 int main(void) {
 
