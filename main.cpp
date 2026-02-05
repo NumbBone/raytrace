@@ -2,6 +2,7 @@
 #include "raymath.h"
 #include <math.h>
 #include <tuple>
+#include <vector>
 
 const int GRID_COLS =11;
 const int GRID_ROWS =11;
@@ -9,21 +10,24 @@ const int GRID_ROWS =11;
 const float FOV           =PI / 2;
 const float DIST_FROM_CAM =1;
 const float EPSI = 1e-3;
+const int CLIPING_PLANE = 10;
 
-const int SCREEN_WIDTH = 200;
+const int SCREEN_WIDTH = 400;
 
-Color map[11][11] = {
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
-    { {0}, RED,    GOLD,   {0}, {0}, {0}, LIME,   {0},    {0},    {0},    {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, VIOLET, SKYBLUE, {0},    {0},    {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    ORANGE,  PINK,   {0},    {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    BLUE,   PURPLE, {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} },
-    { {0}, {0},    {0},    {0}, {0}, {0}, {0},    {0},    {0},    {0},    {0} }
+std::vector<Texture2D> textures;
+
+int map[11][11] = {
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 1, 2, 0, 0, 0, 1, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
 Color backround{
@@ -32,7 +36,6 @@ Color backround{
     .b = 25,
     .a = 255,
 };
-
 
 Vector2 fromDirection(float angle) {
     return Vector2Normalize(Vector2{cosf(angle), sinf(angle)});
@@ -102,7 +105,7 @@ Vector2 Gen_NextPoint(Vector2 p1, Vector2 p2)
         }
 
 
-        if(Vector2Distance(p2, newPointX) < Vector2Distance(p2 , newPointY)){
+        if(Vector2DistanceSqr(p2, newPointX) < Vector2DistanceSqr(p2 , newPointY)){
             p3 = newPointX;
         } else {
             p3 = newPointY;
@@ -156,19 +159,19 @@ class Player
 
 Vector2 castRay(Vector2 p1, Vector2 p2) 
 {
- for (;;)
+    Vector2 start = p1;
+    while (Vector2DistanceSqr(start, p1) < CLIPING_PLANE*CLIPING_PLANE)
     {
         Vector2 c = Cell_snap(p1, p2);
-        if (map[(int)c.y][(int)c.x].a != 0){
-            return p2;
+        if (map[(int)c.y][(int)c.x] > 0){
+            break;
         }
-        if ((c.x >= GRID_COLS || c.x < 0 || c.y >= GRID_ROWS ||c.y < 0)){
-            return p2;
-        }
+
         Vector2 pt = p2;
         p2 = Gen_NextPoint(p1, p2);
             p1 = pt;
     };
+    return p2;
 };
 
 void render(Player *player) 
@@ -183,18 +186,46 @@ void render(Player *player)
         const Vector2 ray = castRay(player->posicion, p1);
         const Vector2 cell = Cell_snap(player->posicion, ray);
 
-        if (!inMap(cell) && map[(int)cell.y][(int)cell.x].a != 0){
+        if (!inMap(cell) && map[(int)cell.y][(int)cell.x] > 0){
 
             Vector2 rayVec = Vector2Subtract(ray, player->posicion);
-            float perpDist = Vector2DotProduct(rayVec, dir);
+            float perpDist = Vector2DotProduct(rayVec, dir) * 0.7;
 
             if (perpDist < 0.1f) perpDist = 0.1f;
 
-            float stripHeight = (GetScreenHeight() / perpDist) * (DIST_FROM_CAM / (2.0f * tanf(FOV*0.5)));
-            DrawRectangle(i * stripWidth, (GetScreenHeight() - stripHeight ) * 0.5,stripWidth + 1,
-             stripHeight,
-             map[(int)cell.y][(int)cell.x]
-            );
+            float t = (GetScreenHeight() / perpDist);
+            float stripHeight = t * (DIST_FROM_CAM / (2.0f * tanf(FOV*0.5)));
+
+            bool hitVertical = (fabsf(ray.x - floorf(ray.x + 0.5f)) < EPSI * 2.0f);
+
+            float wallHitX = hitVertical ? ray.y : ray.x;
+            wallHitX -= floorf(wallHitX);
+
+            Texture2D tex = textures[map[(int)cell.y][(int)cell.x]];
+            int texX = (int)(wallHitX * (float)tex.width);
+
+            Rectangle sourceRec = { (float)texX, 0, 1, (float)tex.height };
+
+            Rectangle destRec = { 
+                (float)(i * stripWidth), 
+                (float)((GetScreenHeight() - stripHeight) * 0.5f), 
+                (float)stripWidth + 1, 
+                stripHeight 
+            };
+
+            Vector2 origin = { 0, 0 };
+
+            const float maxFogDist = 10.0f; 
+
+            float brightness = 1.0f - (perpDist / maxFogDist);
+
+            if (brightness < 0.0f) brightness = 0.0f;
+            if (brightness > 1.0f) brightness = 1.0f;
+
+            unsigned char colorVal = (unsigned char)(255 * brightness);
+            Color tint = { colorVal, colorVal, colorVal, 255 };
+
+            DrawTexturePro(tex, sourceRec, destRec, {0, 0}, 0.0f, tint);
         }
     }
     
@@ -207,12 +238,11 @@ void minimap(Player *player, Vector2 offset, float scale)
 
     for (int y = 0; y < GRID_ROWS; y++) {
         for (int x = 0; x < GRID_COLS; x++) {
-            Color cellColor = map[y][x];
             
             Vector2 drawPos = { offset.x + x * cellSize, offset.y + y * cellSize };
 
-            if (cellColor.a != 0) {
-                DrawRectangleV(drawPos, {cellSize, cellSize}, cellColor);
+            if (map[y][x] != 0) {
+                DrawRectangleV(drawPos, {cellSize, cellSize}, WHITE);
             } else {
                 DrawRectangleLines(drawPos.x, drawPos.y, cellSize, cellSize, DARKGRAY);
             }
@@ -242,6 +272,9 @@ int main(void) {
     InitWindow(1200, 900, "raylib [core] example - basic window");
     SetTargetFPS(60);
 
+    textures.push_back(LoadTexture("images/error.png"));
+    textures.push_back(LoadTexture("images/images.jpg"));
+    textures.push_back(LoadTexture("images/troll.png"));
     Player player = {
         {5.5, 5.5},
         -PI/4
@@ -249,11 +282,15 @@ int main(void) {
     while (!WindowShouldClose()) {
         player.playerUpdate();
 
-            BeginDrawing();
+        BeginDrawing();
         ClearBackground(backround);
 
         render(&player);
         minimap(&player, Vector2{0, 0}, 0.35);
+
+
+
+
         EndDrawing();
     };
 
