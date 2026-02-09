@@ -7,10 +7,10 @@
 const int GRID_COLS =11;
 const int GRID_ROWS =11;
 
-const float FOV           =PI / 2;
-const float DIST_FROM_CAM =1;
-const float EPSI = 1e-3;
-const int CLIPING_PLANE = 10;
+const float FOV           =PI / 4.5;
+const float DIST_FROM_CAM =0.3;
+const float EPSI          =1e-3;
+const int CLIPING_PLANE   =10;
 
 const int SCREEN_WIDTH = 400;
 
@@ -19,7 +19,7 @@ std::vector<Texture2D> textures;
 int map[11][11] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
     {0, 1, 2, 0, 0, 0, 1, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0},
+    {0, 0, 0, 0, 0, 0, 3, 1, 0, 0, 0},
     {0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0},
     {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0},
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -36,6 +36,11 @@ Color backround{
     .b = 25,
     .a = 255,
 };
+
+typedef struct {
+    const int screenWidth;
+    const int screenHeight;
+} ScreenContex;
 
 Vector2 fromDirection(float angle) {
     return Vector2Normalize(Vector2{cosf(angle), sinf(angle)});
@@ -68,17 +73,17 @@ Vector2 Cell_snap(Vector2 p1 , Vector2 p2)
     return Cell;
 };
 
-Vector2 world_to_screen(Vector2 world_pos, Vector2 offset, float scale) {
-    float cell_width = ((float)GetScreenWidth() * scale) / GRID_COLS;
-    float cell_height = ((float)GetScreenHeight() * scale) / GRID_ROWS;
-    return { offset.x + world_pos.x * cell_width, offset.y + world_pos.y * cell_height };
-}
+// Vector2 world_to_screen(ScreenContex screen, Vector2 world_pos, Vector2 offset, float scale) {
+//     float cell_width = ((float)screen.screenWidth * scale) / GRID_COLS;
+//     float cell_height = ((float)screen.screenHeight * scale) / GRID_ROWS;
+//     return { offset.x + world_pos.x * cell_width, offset.y + world_pos.y * cell_height };
+// }
 
-Vector2 screen_to_world(Vector2 screen_pos, Vector2 offset, float scale) {
-    float cell_width = ((float)GetScreenWidth() * scale) / GRID_COLS;
-    float cell_height = ((float)GetScreenHeight() * scale) / GRID_ROWS;
-    return { (screen_pos.x - offset.x) / cell_width, (screen_pos.y - offset.y) / cell_height };
-}
+// Vector2 screen_to_world(ScreenContex screen, Vector2 screen_pos, Vector2 offset, float scale) {
+//     float cell_width = ((float)screen.screenWidth * scale) / GRID_COLS;
+//     float cell_height = ((float)screen.screenHeight * scale) / GRID_ROWS;
+//     return { (screen_pos.x - offset.x) / cell_width, (screen_pos.y - offset.y) / cell_height };
+// }
 
 Vector2 Gen_NextPoint(Vector2 p1, Vector2 p2) 
 {
@@ -174,9 +179,16 @@ Vector2 castRay(Vector2 p1, Vector2 p2)
     return p2;
 };
 
-void render(Player *player) 
+void renderWalls(const ScreenContex *screen, const Player *player) 
 {
-    const int stripWidth = GetScreenWidth() / SCREEN_WIDTH; 
+
+};
+
+void render(const ScreenContex *screen, Player *player) 
+{
+    const int screenWidth = screen->screenWidth;
+    const int screenHeight = screen->screenHeight;
+    const int stripWidth = screenWidth / SCREEN_WIDTH; 
     auto [lpoint, rpoint] = player->fovRange();
     Vector2 dir =fromDirection(player->direction);
 
@@ -189,11 +201,11 @@ void render(Player *player)
         if (!inMap(cell) && map[(int)cell.y][(int)cell.x] > 0){
 
             Vector2 rayVec = Vector2Subtract(ray, player->posicion);
-            float perpDist = Vector2DotProduct(rayVec, dir) * 0.7;
+            float perpDist = Vector2DotProduct(rayVec, dir);
 
-            if (perpDist < 0.1f) perpDist = 0.1f;
+            if (perpDist < EPSI) perpDist = EPSI;
 
-            float t = (GetScreenHeight() / perpDist);
+            float t = (screenHeight / perpDist);
             float stripHeight = t * (DIST_FROM_CAM / (2.0f * tanf(FOV*0.5)));
 
             bool hitVertical = (fabsf(ray.x - floorf(ray.x + 0.5f)) < EPSI * 2.0f);
@@ -208,7 +220,7 @@ void render(Player *player)
 
             Rectangle destRec = { 
                 (float)(i * stripWidth), 
-                (float)((GetScreenHeight() - stripHeight) * 0.5f), 
+                (float)((screenHeight - stripHeight) * 0.5f), 
                 (float)stripWidth + 1, 
                 stripHeight 
             };
@@ -232,9 +244,10 @@ void render(Player *player)
 
 };
 
-void minimap(Player *player, Vector2 offset, float scale)
+void minimap(const ScreenContex *screen, Player *player, Vector2 offset, float scale)
 {
-    float cellSize = ((float)GetScreenHeight() * scale) / GRID_ROWS;
+    const int screenHeight = screen->screenHeight;
+    float cellSize = ((float)screenHeight * scale) / GRID_ROWS;
 
     for (int y = 0; y < GRID_ROWS; y++) {
         for (int x = 0; x < GRID_COLS; x++) {
@@ -275,21 +288,28 @@ int main(void) {
     textures.push_back(LoadTexture("images/error.png"));
     textures.push_back(LoadTexture("images/images.jpg"));
     textures.push_back(LoadTexture("images/troll.png"));
+    textures.push_back(LoadTexture("images/redbrick.png"));
+
+
     Player player = {
         {5.5, 5.5},
         -PI/4
     };
+
+    ScreenContex Screen = {
+        GetScreenWidth(),
+        GetScreenHeight()
+    };
+
     while (!WindowShouldClose()) {
         player.playerUpdate();
 
         BeginDrawing();
         ClearBackground(backround);
 
-        render(&player);
-        minimap(&player, Vector2{0, 0}, 0.35);
-
-
-
+        renderWalls(&Screen, &player);
+        render(&Screen, &player);
+        minimap(&Screen, &player, Vector2{0, 0}, 0.35);
 
         EndDrawing();
     };
