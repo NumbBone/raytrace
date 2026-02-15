@@ -12,7 +12,9 @@ const float DIST_FROM_CAM =0.3;
 const float EPSI          =1e-3;
 const int CLIPING_PLANE   =10;
 
+const int RECT_HEIGHT = 100;
 const int SCREEN_WIDTH = 400;
+const int NUM_CEIL_BAND = 16;
 
 std::vector<Texture2D> textures;
 
@@ -179,10 +181,26 @@ Vector2 castRay(Vector2 p1, Vector2 p2)
     return p2;
 };
 
-void renderWalls(const ScreenContex *screen, const Player *player) 
+void renderCeilFloor(const ScreenContex *screen, const Player *player) 
 {
+    float horizon = screen->screenHeight * 0.5f;
 
-};
+    for (int band = 0; band < NUM_CEIL_BAND; ++band) {
+
+        float t0 = (float)band / NUM_CEIL_BAND;
+        float t1 = (float)(band + 1) / NUM_CEIL_BAND;
+
+        float dist0 = horizon * powf(t0, 3); 
+        float dist1 = horizon * powf(t1, 3);
+
+        int y0 = (int)(horizon - dist0);
+        int y1 = (int)(horizon - dist1);
+
+        int rectHeight = y0 - y1; 
+        if (rectHeight < 1) rectHeight = 1;
+
+    }
+}
 
 void render(const ScreenContex *screen, Player *player) 
 {
@@ -307,7 +325,7 @@ int main(void) {
         BeginDrawing();
         ClearBackground(backround);
 
-        renderWalls(&Screen, &player);
+        renderCeilFloor(&Screen, &player);
         render(&Screen, &player);
         minimap(&Screen, &player, Vector2{0, 0}, 0.35);
 
