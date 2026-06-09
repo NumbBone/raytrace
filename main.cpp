@@ -7,10 +7,11 @@
 const int GRID_COLS =11;
 const int GRID_ROWS =11;
 
-const float FOV           =PI / 4.5;
-const float DIST_FROM_CAM =0.3;
+const float FOV           =PI / 5.5;
+const float DIST_FROM_CAM =0.4;
 const float EPSI          =1e-3;
 const int CLIPING_PLANE   =10;
+const float PLAYER_SIZE   =0.5;
 
 const int RECT_HEIGHT = 100;
 const int SCREEN_WIDTH = 400;
@@ -32,6 +33,7 @@ int map[11][11] = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
+
 Color backround{
     .r = 25,
     .g = 25,
@@ -43,6 +45,15 @@ typedef struct {
     const int screenWidth;
     const int screenHeight;
 } ScreenContex;
+
+Vector2 PlayerHitbox[4] = {
+  {-PLAYER_SIZE, -PLAYER_SIZE},
+  {PLAYER_SIZE,-PLAYER_SIZE},
+  {-PLAYER_SIZE,PLAYER_SIZE},
+  {PLAYER_SIZE,PLAYER_SIZE}
+}; 
+
+
 
 Vector2 fromDirection(float angle) {
     return Vector2Normalize(Vector2{cosf(angle), sinf(angle)});
@@ -61,20 +72,40 @@ float snap(float x, float dx)
     return x;
 };
 
+
 Vector2 Cell_snap(Vector2 p1 , Vector2 p2) 
 {
     float dx = p2.x - p1.x;
     float dy = p2.y - p1.y;
-
     Vector2 Cell = {
         floor(p2.x + copysign(p2.x, dx) * EPSI),
         floor(p2.y + copysign(p2.y, dy) * EPSI),
     };
 
-
     return Cell;
 };
 
+
+bool isWall( Vector2 p)
+{
+    Vector2 WallPos = {
+	floor(p.x),
+	floor(p.y)
+    };
+
+    if( map[(int)p.y][(int)p.x] > 0 ){
+	return true;
+      }
+    return false;
+};
+
+bool checkWall(Vector2 pos) 
+{
+  for (int i = 0; i < 4; i++){
+    if(isWall(Vector2Add(pos, PlayerHitbox[i]))) return true;
+  }
+  return false;
+};
 // Vector2 world_to_screen(ScreenContex screen, Vector2 world_pos, Vector2 offset, float scale) {
 //     float cell_width = ((float)screen.screenWidth * scale) / GRID_COLS;
 //     float cell_height = ((float)screen.screenHeight * scale) / GRID_ROWS;
@@ -130,8 +161,9 @@ class Player
     public:
         Vector2 posicion;
         float direction;
+	Vector2 newposition;
 
-        std::tuple<Vector2, Vector2> fovRange(){
+        std::tuple<Vector2, Vector2> fovRange() const {
 
             Vector2 dir = fromDirection(this->direction);
 
@@ -146,6 +178,7 @@ class Player
             return {p1, p2};
         }
         void playerUpdate(){
+	  
             if (IsKeyDown(KEY_A)){
                 this->direction -= PI * 0.025;
             };
@@ -155,12 +188,16 @@ class Player
             };
 
             if (IsKeyDown(KEY_W)){
-                this->posicion = this->posicion + fromDirection(this->direction) * 0.025;
+                newposition = this->posicion + fromDirection(this->direction) * 0.025;
             };
     
             if (IsKeyDown(KEY_S)){
-                this->posicion = this->posicion - fromDirection(this->direction) * 0.025;
+                newposition = this->posicion - fromDirection(this->direction) * 0.025;
             };
+
+	    if ( !checkWall(newposition)){
+	        this->posicion = newposition;
+	    }
         }
 };
 
@@ -183,23 +220,6 @@ Vector2 castRay(Vector2 p1, Vector2 p2)
 
 void renderCeilFloor(const ScreenContex *screen, const Player *player) 
 {
-    float horizon = screen->screenHeight * 0.5f;
-
-    for (int band = 0; band < NUM_CEIL_BAND; ++band) {
-
-        float t0 = (float)band / NUM_CEIL_BAND;
-        float t1 = (float)(band + 1) / NUM_CEIL_BAND;
-
-        float dist0 = horizon * powf(t0, 3); 
-        float dist1 = horizon * powf(t1, 3);
-
-        int y0 = (int)(horizon - dist0);
-        int y1 = (int)(horizon - dist1);
-
-        int rectHeight = y0 - y1; 
-        if (rectHeight < 1) rectHeight = 1;
-
-    }
 }
 
 void render(const ScreenContex *screen, Player *player) 
@@ -284,7 +304,17 @@ void minimap(const ScreenContex *screen, Player *player, Vector2 offset, float s
         offset.x + player->posicion.x * cellSize,
         offset.y + player->posicion.y * cellSize
     };
-    DrawCircleV(playerMinimapPos, 5, WHITE);
+    
+
+    float playerMinimapSize = PLAYER_SIZE * cellSize;
+    
+
+    //DrawCircleV(playerMinimapPos, 5, WHITE);
+    DrawRectangle(playerMinimapPos.x - (playerMinimapSize *0.5),
+                  playerMinimapPos.y - (playerMinimapSize *0.5),
+                  playerMinimapSize,
+		  playerMinimapSize,
+		  RED);
 
     Vector2 dir = fromDirection(player->direction);
     Vector2 viewLine = Vector2Add(playerMinimapPos, Vector2Scale(dir, cellSize));
@@ -300,7 +330,7 @@ void minimap(const ScreenContex *screen, Player *player, Vector2 offset, float s
 
 int main(void) {
 
-    InitWindow(1200, 900, "raylib [core] example - basic window");
+    InitWindow(1200, 900, "Raytracing");
     SetTargetFPS(60);
 
     textures.push_back(LoadTexture("images/error.png"));
@@ -320,12 +350,12 @@ int main(void) {
     };
 
     while (!WindowShouldClose()) {
-        player.playerUpdate();
 
+        player.playerUpdate();
         BeginDrawing();
         ClearBackground(backround);
 
-        renderCeilFloor(&Screen, &player);
+	//renderCeilFloor(&Screen, &player);
         render(&Screen, &player);
         minimap(&Screen, &player, Vector2{0, 0}, 0.35);
 
